@@ -108,6 +108,23 @@ class GeminiClient(
                 "If no new or changed readable text is visible, respond only with [NONE]. Plain spoken English, no markdown."
             }
         }
+
+        /**
+         * Builds the LIVE DESCRIBE prompt for non-stop scene and obstacle description while moving.
+         */
+        fun buildLiveDescribePrompt(language: String, lastDescription: String): String {
+            val isBn = language.equals("bn", ignoreCase = true)
+            val cleanLast = lastDescription.trim().replace("\"", "'")
+            return if (isBn) {
+                "আপনি একজন অন্ধ ব্যক্তির লাইভ চোখ, যিনি সামনে হেঁটে যাচ্ছেন। এই ছবি দেখে সর্বোচ্চ ১-২ টি ছোট বাক্যে স্বাভাবিক কথ্য বাংলায় বলুন: সামনে কী কী বাধা, মানুষ, সিঁড়ি বা দরজা আছে এবং চলার পথ পরিষ্কার কি না। " +
+                (if (cleanLast.isNotEmpty()) "সর্বশেষ আপনি বলেছিলেন: '$cleanLast'। যদি দৃশ্য অপরিবর্তিত থাকে এবং নতুন কোনো বাধা না থাকে, তবে শুধুমাত্র [SAME] লিখুন। " else "") +
+                "অপ্রয়োজনীয় কথা বলবেন না। কোনো মার্কডাউন ব্যবহার করবেন না।"
+            } else {
+                "You are the live eyes of a blind person walking forward. In 1 short sentence (under 15 words): describe what is immediately ahead—obstacles, hazards (steps, drops, walls), people, or if the path is clear. " +
+                (if (cleanLast.isNotEmpty()) "Last time you said: '$cleanLast'. If the scene is unchanged and there are no new obstacles or dangers, reply ONLY '[SAME]'. " else "") +
+                "Plain spoken English, no markdown."
+            }
+        }
     }
 
     /**
@@ -168,6 +185,27 @@ class GeminiClient(
             prompt = prompt,
             language = language,
             maxTokens = 100
+        )
+    }
+
+    /**
+     * Executes Live Continuous Scene Description while moving (non-stop describing surroundings).
+     */
+    suspend fun describeLive(
+        apiKey: String,
+        base64Image: String,
+        model: String = DEFAULT_MODEL,
+        language: String = "en",
+        lastDescription: String = ""
+    ): Result<String> {
+        val prompt = buildLiveDescribePrompt(language, lastDescription)
+        return generateContent(
+            apiKey = apiKey,
+            model = model,
+            base64Image = base64Image,
+            prompt = prompt,
+            language = language,
+            maxTokens = 80
         )
     }
 

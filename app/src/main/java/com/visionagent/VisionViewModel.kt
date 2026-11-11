@@ -168,9 +168,10 @@ class VisionViewModel @JvmOverloads constructor(
     }
 
     /**
-     * LIVE CONTINUOUS TEXT READING:
-     * Continuously scans and reads out signs, labels, doors, and text as the blind user moves around.
-     * Automatically filters duplicate text and stays silent when no new text is visible.
+     * LIVE CONTINUOUS VISION & SURROUNDINGS DESCRIBING:
+     * Non-stop continuous description of what is around (obstacles, paths, hazards, people, doors)
+     * as the blind user moves around.
+     * Automatically filters duplicate/unchanged scenes and announces changes in real time.
      */
     fun startLiveReading() {
         if (_isLiveReading.value) {
@@ -192,9 +193,9 @@ class VisionViewModel @JvmOverloads constructor(
         haptics.vibrateActionStart()
 
         val startAnnouncement = if (currentSettings.language.equals("bn", ignoreCase = true)) {
-            "লাইভ টেক্সট রিডিং শুরু হয়েছে। হাঁটার সাথে সাথে লেখা পড়ে শোনানো হবে।"
+            "লাইভ ক্যামেরা চালু হয়েছে। চারপাশের পরিবেশ ও বাধার বিবরণ অবিরাম দেওয়া হবে।"
         } else {
-            "Live text reading active. Scanning while moving."
+            "Live vision active. Describing your surroundings continuously."
         }
 
         liveReadingJob?.cancel()
@@ -213,22 +214,24 @@ class VisionViewModel @JvmOverloads constructor(
                     haptics.vibrateGentleTick()
                     val base64Image = ImageUtils.processImageForGemini(imageProxy)
 
-                    // 3. Ask Gemini for new visible text
-                    val result = geminiClient.readLiveText(
+                    // 3. Ask Gemini for live surroundings and hazards
+                    val result = geminiClient.describeLive(
                         apiKey = effectiveKey,
                         base64Image = base64Image,
                         model = currentSettings.model,
                         language = currentSettings.language,
-                        lastReadText = lastLiveReadText
+                        lastDescription = lastLiveReadText
                     )
 
                     result.fold(
-                        onSuccess = { newText ->
-                            val cleanText = newText.trim()
+                        onSuccess = { newDesc ->
+                            val cleanText = newDesc.trim()
                             if (cleanText.isNotEmpty() &&
+                                !cleanText.equals("[SAME]", ignoreCase = true) &&
+                                !cleanText.equals("SAME", ignoreCase = true) &&
+                                !cleanText.equals("\"[SAME]\"", ignoreCase = true) &&
                                 !cleanText.equals("[NONE]", ignoreCase = true) &&
                                 !cleanText.equals("NONE", ignoreCase = true) &&
-                                !cleanText.equals("\"[NONE]\"", ignoreCase = true) &&
                                 !isTextSimilar(cleanText, lastLiveReadText)
                             ) {
                                 lastLiveReadText = cleanText
@@ -246,18 +249,18 @@ class VisionViewModel @JvmOverloads constructor(
                             }
                         },
                         onFailure = { error ->
-                            Log.w(TAG, "Live text read cycle error: ${error.message}")
+                            Log.w(TAG, "Live vision cycle error: ${error.message}")
                         }
                     )
 
                     if (_isLiveReading.value) {
                         _uiState.value = UiState.Idle
-                        delay(1200) // Brief pause while walking before capturing next frame
+                        delay(1000) // Brief pause while walking before capturing next frame
                     }
                 } catch (e: CancellationException) {
                     break
                 } catch (e: Exception) {
-                    Log.w(TAG, "Live text scan loop exception: ${e.message}")
+                    Log.w(TAG, "Live vision loop exception: ${e.message}")
                     delay(2000)
                 }
             }

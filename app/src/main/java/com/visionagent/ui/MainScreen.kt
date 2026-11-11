@@ -328,9 +328,9 @@ fun MainScreen(
         // --- STATUS ANNOUNCEMENT BANNER (Polite Live Region for TalkBack) ---
         val statusText = if (isLiveReading) {
             when (uiState) {
-                is UiState.Speaking -> if (isBn) "পড়ছি..." else "Reading..."
-                is UiState.Thinking -> if (isBn) "লাইভ বিশ্লেষণ চলছে..." else "Analyzing live..."
-                else -> if (isBn) "চলমান লাইভ রিডিং..." else "Live reading active..."
+                is UiState.Speaking -> if (isBn) "বলছি..." else "Describing..."
+                is UiState.Thinking -> if (isBn) "চারপাশ বিশ্লেষণ চলছে..." else "Analyzing surroundings..."
+                else -> if (isBn) "লাইভ চারপাশ বর্ণনা চলছে..." else "Live vision active..."
             }
         } else {
             when (val state = uiState) {
@@ -428,13 +428,13 @@ fun MainScreen(
 
             // 2. READ TEXT / LIVE READING BUTTON SECTION
             if (isLiveReading) {
-                // When actively reading live text while moving
+                // When actively describing surroundings live while moving
                 BigActionButton(
-                    label = if (isBn) "লাইভ রিডিং থামান" else "STOP LIVE READ",
-                    subtitle = if (isBn) "হাঁটার সময় স্ক্যান চলছে • ট্যাপ করে থামান" else "Scanning live while moving • Tap to stop",
+                    label = if (isBn) "লাইভ ভিশন থামান" else "STOP LIVE",
+                    subtitle = if (isBn) "চারপাশ অবিরাম বর্ণনা চলছে • ট্যাপ করে থামান" else "Describing surroundings live • Tap to stop",
                     backgroundColor = HighContrastError,
                     textStyle = SecondaryActionButtonTextStyle,
-                    contentDescription = if (isBn) "লাইভ রিডিং বন্ধ করতে ট্যাপ করুন" else "Stop live continuous text reading",
+                    contentDescription = if (isBn) "লাইভ ভিশন বন্ধ করতে ট্যাপ করুন" else "Stop live continuous scene and obstacle description",
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1.0f),
@@ -470,16 +470,16 @@ fun MainScreen(
                         }
                     )
 
-                    // Continuous Live Read while walking/moving
+                    // Continuous Live Scene & Obstacle Describing while walking/moving
                     BigActionButton(
                         label = if (isBusy) (if (isBn) "থামুন" else "STOP") else (if (isBn) "লাইভ ⚡" else "LIVE ⚡"),
-                        subtitle = if (isBusy) (if (isBn) "বাতিল করুন" else "Tap to stop") else (if (isBn) "হাঁটার সময়" else "While moving"),
+                        subtitle = if (isBusy) (if (isBn) "বাতিল করুন" else "Tap to stop") else (if (isBn) "চারপাশ অবিরাম বর্ণনা" else "Live surroundings"),
                         backgroundColor = Color(0xFFFFB74D), // High-visibility Amber / Bright Warning Orange
                         textStyle = SecondaryActionButtonTextStyle.copy(fontSize = 22.sp, lineHeight = 26.sp),
                         contentDescription = if (isBusy) {
                             if (isBn) "চলমান কাজ বন্ধ করুন" else "Stop current operation"
                         } else {
-                            if (isBn) "হাঁটার সময় লাইভ ক্যামেরা দিয়ে স্বয়ংক্রিয় লেখা পড়তে শুরু করুন" else "Start continuous live camera text reading while moving"
+                            if (isBn) "হাঁটার সময় চারপাশের পরিবেশ ও বাধার বিবরণ অবিরাম শুনতে শুরু করুন" else "Start continuous live camera description of surroundings and obstacles"
                         },
                         modifier = Modifier
                             .weight(0.42f)
