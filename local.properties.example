@@ -1,0 +1,11 @@
+## This file must *NOT* be checked into Version Control Systems,
+# as it contains information specific to your local configuration.
+#
+# Location of the Android SDK. This is only used by Gradle.
+# For Windows: sdk.dir=C\:\\Users\\<USER>\\AppData\\Local\\Android\\Sdk
+# For macOS:   sdk.dir=/Users/<USER>/Library/Android/sdk
+# For Linux:   sdk.dir=/home/<USER>/Android/Sdk
+sdk.dir=C\:\\Users\\HP\\AppData\\Local\\Android\\Sdk
+
+# Gemini API Key obtained from Google AI Studio (https://aistudio.google.com/app/apikey)
+GEMINI_API_KEY=YOUR_GEMINI_API_KEY_HERE
