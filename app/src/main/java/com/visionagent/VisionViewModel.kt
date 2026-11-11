@@ -85,6 +85,52 @@ class VisionViewModel @JvmOverloads constructor(
         speaker.onBanglaMissing = {
             _banglaMissingNotice.value = true
         }
+
+        // Initialize hands-free voice command wake listener
+        viewModelScope.launch {
+            settings.collect { currentSettings ->
+                if (currentSettings.voiceCommandsEnabled && _uiState.value is UiState.Idle) {
+                    startVoiceCommands(currentSettings.language)
+                } else if (!currentSettings.voiceCommandsEnabled) {
+                    listener.stopContinuousCommandListening()
+                }
+            }
+        }
+    }
+
+    /**
+     * Starts continuous listening for hands-free voice commands ("Vision", "Tell me vision", "Stop vision").
+     */
+    fun startVoiceCommands(language: String = settings.value.language) {
+        if (!listener.isAvailable) return
+        listener.startContinuousCommandListening(language) { command ->
+            handleVoiceCommand(command)
+        }
+    }
+
+    private fun handleVoiceCommand(command: com.visionagent.speech.VoiceCommand) {
+        Log.d(TAG, "Voice command received: $command")
+        when (command) {
+            is com.visionagent.speech.VoiceCommand.Stop -> stop()
+            is com.visionagent.speech.VoiceCommand.Describe -> onDescribeTrigger()
+            is com.visionagent.speech.VoiceCommand.ReadText -> onReadTextTrigger()
+            is com.visionagent.speech.VoiceCommand.Ask -> {
+                if (!command.directQuestion.isNullOrBlank()) {
+                    // Question spoken directly with wake word (e.g. "Vision, what is in front of me?")
+                    haptics.vibrateActionStart()
+                    processAskWithImage(command.directQuestion, System.currentTimeMillis())
+                } else {
+                    // Wake word "Vision" spoken -> open microphone with beep
+                    onAskTrigger()
+                }
+            }
+        }
+    }
+
+    private fun resumeVoiceCommandsIfEnabled() {
+        if (settings.value.voiceCommandsEnabled && listener.isAvailable) {
+            listener.resumeContinuousListening()
+        }
     }
 
     /**
@@ -107,6 +153,7 @@ class VisionViewModel @JvmOverloads constructor(
         listener.cancel()
         haptics.vibrateActionStart()
         _uiState.value = UiState.Idle
+        resumeVoiceCommandsIfEnabled()
         Log.d(TAG, "Active action cancelled by user (Universal Stop)")
     }
 
@@ -364,6 +411,7 @@ class VisionViewModel @JvmOverloads constructor(
             onDone = {
                 if (_uiState.value is UiState.Speaking) {
                     _uiState.value = UiState.Idle
+                    resumeVoiceCommandsIfEnabled()
                 }
             }
         )
@@ -379,6 +427,7 @@ class VisionViewModel @JvmOverloads constructor(
             onDone = {
                 if (_uiState.value is UiState.Error) {
                     _uiState.value = UiState.Idle
+                    resumeVoiceCommandsIfEnabled()
                 }
             }
         )
@@ -441,6 +490,10 @@ class VisionViewModel @JvmOverloads constructor(
 
     fun updateShowCameraPreview(show: Boolean) {
         viewModelScope.launch { settingsRepository.updateShowPreview(show) }
+    }
+
+    fun updateVoiceCommandsEnabled(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.updateVoiceCommandsEnabled(enabled) }
     }
 
     fun dismissBanglaMissingNotice() {

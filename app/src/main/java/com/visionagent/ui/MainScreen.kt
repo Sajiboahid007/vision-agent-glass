@@ -141,23 +141,77 @@ fun MainScreen(
                 )
             )
 
-            // Settings gear button with large touch target >= 48dp
-            IconButton(
-                onClick = {
-                    if (isBusy) viewModel.stop()
-                    onOpenSettings()
-                },
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // Voice Control toggle icon button
+                IconButton(
+                    onClick = {
+                        viewModel.updateVoiceCommandsEnabled(!settings.voiceCommandsEnabled)
+                    },
+                    modifier = Modifier
+                        .size(48.dp)
+                        .semantics {
+                            contentDescription = if (settings.voiceCommandsEnabled) {
+                                "Hands-free voice control enabled. Tap to disable."
+                            } else {
+                                "Hands-free voice control disabled. Tap to enable."
+                            }
+                        }
+                ) {
+                    Icon(
+                        imageVector = if (settings.voiceCommandsEnabled) Icons.Default.Mic else Icons.Default.Close,
+                        contentDescription = null,
+                        tint = if (settings.voiceCommandsEnabled) AskLime else SecondaryTextWhite,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(4.dp))
+
+                // Settings gear button with large touch target >= 48dp
+                IconButton(
+                    onClick = {
+                        if (isBusy) viewModel.stop()
+                        onOpenSettings()
+                    },
+                    modifier = Modifier
+                        .size(48.dp)
+                        .semantics {
+                            contentDescription = "Open Settings screen"
+                        }
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = null,
+                        tint = HighContrastWhite,
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
+            }
+        }
+
+        // --- HANDS-FREE VOICE CONTROL PROMPT BANNER ---
+        if (settings.voiceCommandsEnabled) {
+            Row(
                 modifier = Modifier
-                    .size(48.dp)
+                    .fillMaxWidth()
+                    .background(DarkSurfaceElevated)
+                    .padding(horizontal = 16.dp, vertical = 6.dp)
                     .semantics {
-                        contentDescription = "Open Settings screen"
-                    }
+                        contentDescription = "Voice Control Active. Say Vision, Tell me vision, or Stop vision."
+                    },
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
-                    imageVector = Icons.Default.Settings,
-                    contentDescription = null, // handled by IconButton semantics
-                    tint = HighContrastWhite,
-                    modifier = Modifier.size(32.dp)
+                    imageVector = Icons.Default.Mic,
+                    contentDescription = null,
+                    tint = AskLime,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Say \"Vision\", \"Tell me vision\", or \"Stop vision\"",
+                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                    color = HighContrastWhite
                 )
             }
         }
@@ -174,7 +228,7 @@ fun MainScreen(
                 AndroidView(
                     factory = { ctx ->
                         PreviewView(ctx).apply {
-                            implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+                            implementationMode = PreviewView.ImplementationMode.PERFORMANCE
                         }.also { previewView ->
                             coroutineScope.launch {
                                 try {

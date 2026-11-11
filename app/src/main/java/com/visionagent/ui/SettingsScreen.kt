@@ -395,7 +395,7 @@ fun SettingsScreen(
                 }
             }
 
-            // --- SECTION 5: CAMERA PREVIEW TOGGLE ---
+            // --- SECTION 5: CAMERA PREVIEW DISPLAY ---
             SettingsSection(title = "CAMERA PREVIEW DISPLAY") {
                 Row(
                     modifier = Modifier
@@ -412,7 +412,7 @@ fun SettingsScreen(
                             color = HighContrastWhite
                         )
                         Text(
-                            text = "Shows small 25% camera preview on main screen for sighted helpers.",
+                            text = "When OFF, camera works smoothly in the background with zero lag. Turn ON for a 25% preview for sighted helpers.",
                             style = MaterialTheme.typography.bodySmall,
                             color = SecondaryTextWhite
                         )
@@ -431,6 +431,60 @@ fun SettingsScreen(
                             contentDescription = "Show camera preview toggle, currently ${if (settings.showCameraPreview) "enabled" else "disabled"}"
                         }
                     )
+                }
+            }
+
+            // --- SECTION 6: HANDS-FREE VOICE COMMANDS ---
+            SettingsSection(title = "HANDS-FREE VOICE CONTROL ('VISION')") {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Hands-Free Voice Commands",
+                            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
+                            color = HighContrastWhite
+                        )
+                        Text(
+                            text = "Listen in background for 'Vision', 'Tell me vision', or 'Stop vision' without touching buttons.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = SecondaryTextWhite
+                        )
+                    }
+
+                    Switch(
+                        checked = settings.voiceCommandsEnabled,
+                        onCheckedChange = { viewModel.updateVoiceCommandsEnabled(it) },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = AskLime,
+                            checkedTrackColor = AskLime.copy(alpha = 0.5f),
+                            uncheckedThumbColor = SecondaryTextWhite,
+                            uncheckedTrackColor = DarkSurfaceElevated
+                        ),
+                        modifier = Modifier.semantics {
+                            contentDescription = "Hands-free voice control toggle, currently ${if (settings.voiceCommandsEnabled) "enabled" else "disabled"}"
+                        }
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(DarkSurfaceElevated, RoundedCornerShape(8.dp))
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(text = "Voice Commands:", fontWeight = FontWeight.Bold, color = DescribeYellow, fontSize = 14.sp)
+                    Text(text = "• \"Vision\" -> Opens Ask mode for your question", color = HighContrastWhite, fontSize = 13.sp)
+                    Text(text = "• \"Tell me vision\" or \"What are you seeing\" -> Describes the scene", color = HighContrastWhite, fontSize = 13.sp)
+                    Text(text = "• \"Vision read\" or \"Read text\" -> Reads visible text", color = HighContrastWhite, fontSize = 13.sp)
+                    Text(text = "• \"Stop vision\" or \"Stop\" -> Instantly stops speaking", color = HighContrastWhite, fontSize = 13.sp)
                 }
             }
 

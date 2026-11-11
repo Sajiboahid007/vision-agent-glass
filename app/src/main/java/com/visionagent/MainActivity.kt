@@ -97,6 +97,11 @@ class MainActivity : ComponentActivity() {
             speakPermissionNotice(
                 "Microphone permission was denied. You can still use Describe and Read Text, but Ask mode will be disabled."
             )
+        } else {
+            // Audio permission granted -> initiate hands-free voice commands if enabled
+            if (viewModel.settings.value.voiceCommandsEnabled) {
+                viewModel.startVoiceCommands()
+            }
         }
     }
 
@@ -164,6 +169,14 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         updatePermissionStates()
+        if (hasAudioPermission && viewModel.settings.value.voiceCommandsEnabled) {
+            viewModel.listener.resumeContinuousListening()
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        viewModel.listener.pauseContinuousListening()
     }
 
     private fun updatePermissionStates() {

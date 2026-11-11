@@ -31,7 +31,8 @@ data class SettingsData(
     val model: String = SettingsRepository.DEFAULT_MODEL,
     val language: String = SettingsRepository.DEFAULT_LANGUAGE,
     val speechRate: Float = SettingsRepository.DEFAULT_SPEECH_RATE,
-    val showCameraPreview: Boolean = true
+    val showCameraPreview: Boolean = false,
+    val voiceCommandsEnabled: Boolean = true
 ) {
     /**
      * Resolves the effective Gemini API key.
@@ -71,6 +72,7 @@ class SettingsRepository(private val context: Context) {
         val KEY_LANGUAGE = stringPreferencesKey("language")
         val KEY_SPEECH_RATE = floatPreferencesKey("speech_rate")
         val KEY_SHOW_CAMERA_PREVIEW = booleanPreferencesKey("show_camera_preview")
+        val KEY_VOICE_COMMANDS_ENABLED = booleanPreferencesKey("voice_commands_enabled")
     }
 
     /**
@@ -90,7 +92,8 @@ class SettingsRepository(private val context: Context) {
                 model = preferences[KEY_GEMINI_MODEL] ?: DEFAULT_MODEL,
                 language = preferences[KEY_LANGUAGE] ?: DEFAULT_LANGUAGE,
                 speechRate = preferences[KEY_SPEECH_RATE] ?: DEFAULT_SPEECH_RATE,
-                showCameraPreview = preferences[KEY_SHOW_CAMERA_PREVIEW] ?: true
+                showCameraPreview = preferences[KEY_SHOW_CAMERA_PREVIEW] ?: false,
+                voiceCommandsEnabled = preferences[KEY_VOICE_COMMANDS_ENABLED] ?: true
             )
         }
 
@@ -137,6 +140,15 @@ class SettingsRepository(private val context: Context) {
     suspend fun updateShowPreview(show: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[KEY_SHOW_CAMERA_PREVIEW] = show
+        }
+    }
+
+    /**
+     * Toggles hands-free "Vision" voice command wake listener.
+     */
+    suspend fun updateVoiceCommandsEnabled(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_VOICE_COMMANDS_ENABLED] = enabled
         }
     }
 }
