@@ -51,7 +51,9 @@ class Listener(private val context: Context) {
 
     companion object {
         private const val TAG = "VisionAgentListener"
-        private const val RESTART_DELAY_MS = 250L
+        private const val RESTART_DELAY_MS = 300L
+        private const val BEEP_DURATION_MS = 150
+        private const val BEEP_SETTLE_DELAY_MS = 180L
 
         /**
          * Checks if speech recognition services are available on this device.
@@ -64,55 +66,62 @@ class Listener(private val context: Context) {
          * Parses spoken text for Vision Agent voice commands.
          */
         fun parseVoiceCommand(spokenText: String, language: String): VoiceCommand? {
-            val text = spokenText.lowercase().trim()
+            val text = spokenText
+                .lowercase()
+                .trim()
+                .replace(Regex("[.,?!।]+$"), "")
+                .trim()
             val isBn = language.equals("bn", ignoreCase = true)
 
             // 1. Universal Stop
-            if (text == "stop vision" || text == "vision stop" || text == "stop" ||
+            if (text == "stop" || text == "stop vision" || text == "vision stop" ||
                 text.contains("stop vision") || text.contains("vision stop") ||
-                (isBn && (text.contains("থামো") || text.contains("বন্ধ করো")))) {
+                (isBn && (text == "থামো" || text.contains("থামো") || text.contains("বন্ধ করো") || text.contains("থামাও")))) {
                 return VoiceCommand.Stop
             }
 
-            // 2. Describe ("tell me vision", "vision describe", "what are you seeing")
-            if (text.contains("tell me vision") ||
-                text.contains("vision describe") ||
-                text.contains("what are you seeing") ||
-                text.contains("what do you see") ||
-                text.contains("describe what you see") ||
-                text.contains("describe what are you seeing") ||
-                text == "describe" ||
-                (isBn && (text.contains("বর্ণনা করো") || text.contains("কি দেখছো") || text.contains("বলো ভিশন")))) {
+            // 2. Describe ("tell me vision", "vision describe", "what are you seeing", "describe")
+            if (text == "describe" || text == "vision describe" || text == "tell me vision" ||
+                text.contains("tell me vision") || text.contains("tell vision") || text.contains("vision tell") ||
+                text.contains("vision describe") || text.contains("what are you seeing") ||
+                text.contains("what do you see") || text.contains("describe what you see") ||
+                text.contains("describe what are you seeing") || text.contains("describe scene") ||
+                (isBn && (text.contains("বর্ণনা করো") || text.contains("বর্ণনা") || text.contains("কি দেখছো") || text.contains("বলো ভিশন")))) {
                 return VoiceCommand.Describe
             }
 
             // 3. Live Text Reading while moving ("live read", "live text", "live reading")
-            if (text.contains("live read") ||
-                text.contains("live reading") ||
-                text.contains("live text") ||
-                text.contains("read live") ||
-                (isBn && (text.contains("লাইভ পড়ো") || text.contains("লাইভ রিডিং") || text.contains("চলমান রিডিং")))) {
+            if (text == "live read" || text == "live reading" || text == "live text" ||
+                text.contains("live read") || text.contains("live reading") ||
+                text.contains("live text") || text.contains("read live") ||
+                (isBn && (text.contains("লাইভ পড়ো") || text.contains("লাইভ রিডিং") || text.contains("চলমান রিডিং") || text.contains("লাইভ টেক্সট")))) {
                 return VoiceCommand.LiveRead
             }
 
-            // 4. Read Text ("vision read", "read text", "read this")
-            if (text.contains("vision read") ||
-                text.contains("read text") ||
-                text.contains("read this") ||
-                text == "read" ||
-                (isBn && (text.contains("পড়ে শোনাও") || text.contains("লেখা পড়ো")))) {
+            // 4. Read Text ("vision read", "read text", "read this", "read")
+            if (text == "read" || text == "read text" || text == "vision read" ||
+                text.contains("vision read") || text.contains("read text") || text.contains("read this") ||
+                (isBn && (text.contains("পড়ে শোনাও") || text.contains("লেখা পড়ো") || text.contains("পড়ো")))) {
                 return VoiceCommand.ReadText
             }
 
-            // 4. Ask mode / "Vision" wake word
-            if (text.startsWith("vision") || text.startsWith("hey vision") || text.contains("vision ask") ||
-                (isBn && text.startsWith("ভিশন"))) {
-                val cleaned = text
+            // 5. Ask mode / "Vision" wake word / "Ask"
+            if (text == "ask" || text.startsWith("ask ") ||
+                text.startsWith("vision") || text.startsWith("hey vision") || text.contains("vision ask") ||
+                (isBn && (text.startsWith("ভিশন") || text.contains("জিজ্ঞাসা") || text.contains("প্রশ্ন")))) {
+                var cleaned = text
                     .removePrefix("hey vision")
                     .removePrefix("vision")
                     .removePrefix("ভিশন")
                     .trim()
+                cleaned = cleaned
+                    .removePrefix("ask vision")
                     .removePrefix("ask")
+                    .removePrefix("vision")
+                    .removePrefix("ভিশন")
+                    .removePrefix("প্রশ্ন")
+                    .removePrefix("জিজ্ঞাসা")
+                    .trim()
                     .removePrefix(",")
                     .trim()
                 val directQuestion = if (cleaned.length >= 3) cleaned else null
@@ -123,25 +132,33 @@ class Listener(private val context: Context) {
         }
     }
 
+    private enum class Mode {
+        IDLE,
+        CONTINUOUS,
+        SINGLE_SHOT
+    }
+
     private val mainHandler = Handler(Looper.getMainLooper())
     private var speechRecognizer: SpeechRecognizer? = null
     private var toneGenerator: ToneGenerator? = null
 
+    private var activeMode = Mode.IDLE
     private var isListening = false
     private var isCancelledByUser = false
     private var activeLanguage = "en"
+    private var currentSessionId = 0L
+
+    // Continuous voice command listening state
+    private var isContinuousConfigured = false
+    private var isContinuousPaused = false
+    private var onCommandCallback: ((VoiceCommand) -> Unit)? = null
+    private val restartRunnable = Runnable { restartContinuousListening() }
 
     // Single-shot callbacks
     private var onReadyCallback: (() -> Unit)? = null
     private var onResultCallback: ((String) -> Unit)? = null
     private var onErrorCallback: ((String) -> Unit)? = null
     private var onEndOfSpeechCallback: (() -> Unit)? = null
-
-    // Continuous voice command listening state
-    private var isContinuousListening = false
-    private var isContinuousListeningPaused = false
-    private var onCommandCallback: ((VoiceCommand) -> Unit)? = null
-    private val restartRunnable = Runnable { restartContinuousListening() }
 
     val isAvailable: Boolean
         get() = SpeechRecognizer.isRecognitionAvailable(context)
@@ -156,15 +173,30 @@ class Listener(private val context: Context) {
 
     private fun ensureRecognizer() {
         if (speechRecognizer == null) {
-            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context).apply {
-                setRecognitionListener(createRecognitionListener())
+            try {
+                speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context).apply {
+                    setRecognitionListener(createRecognitionListener())
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to create SpeechRecognizer: ${e.message}", e)
+                speechRecognizer = null
             }
         }
     }
 
+    private fun destroyRecognizer() {
+        try {
+            speechRecognizer?.destroy()
+        } catch (e: Exception) {
+            Log.w(TAG, "Error destroying speech recognizer: ${e.message}")
+        }
+        speechRecognizer = null
+        isListening = false
+    }
+
     private fun playBeepTone() {
         try {
-            toneGenerator?.startTone(ToneGenerator.TONE_PROP_BEEP, 150)
+            toneGenerator?.startTone(ToneGenerator.TONE_PROP_BEEP, BEEP_DURATION_MS)
         } catch (e: Exception) {
             Log.w(TAG, "Failed to play beep tone: ${e.message}")
         }
@@ -180,12 +212,19 @@ class Listener(private val context: Context) {
     ) {
         runOnMainThread {
             if (!isAvailable) return@runOnMainThread
-            isContinuousListening = true
-            isContinuousListeningPaused = false
+            isContinuousConfigured = true
+            isContinuousPaused = false
             activeLanguage = language
             onCommandCallback = onCommand
+            isCancelledByUser = false
 
-            startRecognitionInternal(withBeep = false)
+            // Do not interrupt active Ask single-shot session
+            if (activeMode != Mode.SINGLE_SHOT) {
+                mainHandler.removeCallbacks(restartRunnable)
+                cancelInternal()
+                activeMode = Mode.CONTINUOUS
+                startRecognitionInternal(withBeep = false)
+            }
         }
     }
 
@@ -194,10 +233,11 @@ class Listener(private val context: Context) {
      */
     fun pauseContinuousListening() {
         runOnMainThread {
+            isContinuousPaused = true
             mainHandler.removeCallbacks(restartRunnable)
-            isContinuousListeningPaused = true
-            if (isListening) {
+            if (activeMode == Mode.CONTINUOUS) {
                 cancelInternal()
+                activeMode = Mode.IDLE
             }
         }
     }
@@ -207,10 +247,13 @@ class Listener(private val context: Context) {
      */
     fun resumeContinuousListening() {
         runOnMainThread {
-            if (isContinuousListening && isContinuousListeningPaused) {
-                isContinuousListeningPaused = false
-                mainHandler.removeCallbacks(restartRunnable)
-                mainHandler.postDelayed(restartRunnable, RESTART_DELAY_MS)
+            if (isContinuousConfigured) {
+                isContinuousPaused = false
+                isCancelledByUser = false
+                if (activeMode != Mode.SINGLE_SHOT) {
+                    mainHandler.removeCallbacks(restartRunnable)
+                    mainHandler.postDelayed(restartRunnable, RESTART_DELAY_MS)
+                }
             }
         }
     }
@@ -220,18 +263,21 @@ class Listener(private val context: Context) {
      */
     fun stopContinuousCommandListening() {
         runOnMainThread {
-            isContinuousListening = false
-            isContinuousListeningPaused = false
+            isContinuousConfigured = false
+            isContinuousPaused = false
             onCommandCallback = null
             mainHandler.removeCallbacks(restartRunnable)
-            if (isListening) {
+            if (activeMode == Mode.CONTINUOUS) {
                 cancelInternal()
+                activeMode = Mode.IDLE
             }
         }
     }
 
     private fun restartContinuousListening() {
-        if (isContinuousListening && !isContinuousListeningPaused && !isListening) {
+        if (isContinuousConfigured && !isContinuousPaused && activeMode != Mode.SINGLE_SHOT && !isListening) {
+            isCancelledByUser = false
+            activeMode = Mode.CONTINUOUS
             startRecognitionInternal(withBeep = false)
         }
     }
@@ -257,11 +303,13 @@ class Listener(private val context: Context) {
                 return@runOnMainThread
             }
 
-            // Temporarily suspend continuous listener during single-shot Ask mode
+            // Immediately halt continuous restarts and cancel any active recognizer session
             mainHandler.removeCallbacks(restartRunnable)
+            cancelInternal()
 
             isCancelledByUser = false
             activeLanguage = language
+            activeMode = Mode.SINGLE_SHOT
             onReadyCallback = onReady
             onEndOfSpeechCallback = onEndOfSpeech
             onResultCallback = onResult
@@ -274,10 +322,23 @@ class Listener(private val context: Context) {
     private fun startRecognitionInternal(withBeep: Boolean) {
         ensureRecognizer()
 
+        val sessionId = ++currentSessionId
+        isCancelledByUser = false
+
         if (withBeep) {
             playBeepTone()
+            // Allow the beep tone to finish before opening microphone to prevent self-recording
+            mainHandler.postDelayed({
+                if (sessionId == currentSessionId && activeMode == Mode.SINGLE_SHOT && !isCancelledByUser) {
+                    executeStartListening(sessionId)
+                }
+            }, BEEP_SETTLE_DELAY_MS)
+        } else {
+            executeStartListening(sessionId)
         }
+    }
 
+    private fun executeStartListening(sessionId: Long) {
         val localeTag = if (activeLanguage.equals("bn", ignoreCase = true)) "bn-BD" else "en-US"
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
@@ -285,6 +346,7 @@ class Listener(private val context: Context) {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, localeTag)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
+            putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
         }
 
         try {
@@ -293,15 +355,21 @@ class Listener(private val context: Context) {
         } catch (e: Exception) {
             isListening = false
             Log.e(TAG, "Error starting speech recognition: ${e.message}", e)
-            if (isContinuousListening && !isContinuousListeningPaused) {
-                mainHandler.postDelayed(restartRunnable, 1000L)
-            } else {
+            if (activeMode == Mode.CONTINUOUS) {
+                destroyRecognizer()
+                if (isContinuousConfigured && !isContinuousPaused) {
+                    mainHandler.postDelayed(restartRunnable, 1000L)
+                }
+            } else if (activeMode == Mode.SINGLE_SHOT) {
                 val msg = if (activeLanguage.equals("bn", ignoreCase = true)) {
                     "কথা শুনতে সমস্যা হয়েছে। আবার চেষ্টা করুন।"
                 } else {
                     "Failed to start speech recognition. Please try again."
                 }
-                onErrorCallback?.invoke(msg)
+                val cb = onErrorCallback
+                clearSingleShotCallbacks()
+                activeMode = Mode.IDLE
+                cb?.invoke(msg)
             }
         }
     }
@@ -328,8 +396,11 @@ class Listener(private val context: Context) {
     fun cancel() {
         runOnMainThread {
             isCancelledByUser = true
-            cancelInternal()
+            currentSessionId++
+            mainHandler.removeCallbacks(restartRunnable)
             clearSingleShotCallbacks()
+            activeMode = Mode.IDLE
+            cancelInternal()
         }
     }
 
@@ -349,12 +420,7 @@ class Listener(private val context: Context) {
         runOnMainThread {
             stopContinuousCommandListening()
             cancel()
-            try {
-                speechRecognizer?.destroy()
-            } catch (e: Exception) {
-                Log.w(TAG, "Error destroying speech recognizer: ${e.message}")
-            }
-            speechRecognizer = null
+            destroyRecognizer()
 
             try {
                 toneGenerator?.release()
@@ -383,7 +449,10 @@ class Listener(private val context: Context) {
     private fun createRecognitionListener(): RecognitionListener {
         return object : RecognitionListener {
             override fun onReadyForSpeech(params: Bundle?) {
-                onReadyCallback?.invoke()
+                if (isCancelledByUser) return
+                if (activeMode == Mode.SINGLE_SHOT) {
+                    onReadyCallback?.invoke()
+                }
             }
 
             override fun onBeginningOfSpeech() {}
@@ -392,7 +461,10 @@ class Listener(private val context: Context) {
 
             override fun onEndOfSpeech() {
                 isListening = false
-                onEndOfSpeechCallback?.invoke()
+                if (isCancelledByUser) return
+                if (activeMode == Mode.SINGLE_SHOT) {
+                    onEndOfSpeechCallback?.invoke()
+                }
             }
 
             override fun onError(error: Int) {
@@ -401,43 +473,56 @@ class Listener(private val context: Context) {
                     return
                 }
 
-                // If continuous command mode is running:
-                if (isContinuousListening && !isContinuousListeningPaused) {
-                    // Recreate recognizer if client or busy error
-                    if (error == SpeechRecognizer.ERROR_CLIENT || error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY) {
-                        try {
-                            speechRecognizer?.destroy()
-                        } catch (_: Exception) {}
-                        speechRecognizer = null
-                    }
-                    mainHandler.removeCallbacks(restartRunnable)
-                    mainHandler.postDelayed(restartRunnable, RESTART_DELAY_MS)
-                    return
-                }
+                when (activeMode) {
+                    Mode.SINGLE_SHOT -> {
+                        activeMode = Mode.IDLE
+                        val errCb = onErrorCallback
+                        clearSingleShotCallbacks()
 
-                // Single-shot Ask mode error reporting
-                val isBn = activeLanguage.equals("bn", ignoreCase = true)
-                val errorMessage = when (error) {
-                    SpeechRecognizer.ERROR_NO_MATCH,
-                    SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> {
-                        if (isBn) "আমি কোনো প্রশ্ন শুনতে পাইনি।" else "I didn't hear a question."
+                        if (error == SpeechRecognizer.ERROR_CLIENT || error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY) {
+                            destroyRecognizer()
+                        }
+
+                        val isBn = activeLanguage.equals("bn", ignoreCase = true)
+                        val errorMessage = when (error) {
+                            SpeechRecognizer.ERROR_NO_MATCH,
+                            SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> {
+                                if (isBn) "আমি কোনো প্রশ্ন শুনতে পাইনি।" else "I didn't hear a question."
+                            }
+                            SpeechRecognizer.ERROR_NETWORK,
+                            SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> {
+                                if (isBn) "কোনো ইন্টারনেট সংযোগ নেই।" else "No internet connection."
+                            }
+                            SpeechRecognizer.ERROR_AUDIO -> {
+                                if (isBn) "মাইক্রোফোন ত্রুটি হয়েছে।" else "Audio recording error."
+                            }
+                            SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> {
+                                if (isBn) "মাইক্রোফোনের অনুমতি প্রয়োজন।" else "Microphone permission is required."
+                            }
+                            else -> {
+                                if (isBn) "আমি কোনো প্রশ্ন শুনতে পাইনি।" else "I didn't hear a question."
+                            }
+                        }
+
+                        errCb?.invoke(errorMessage)
                     }
-                    SpeechRecognizer.ERROR_NETWORK,
-                    SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> {
-                        if (isBn) "কোনো ইন্টারনেট সংযোগ নেই।" else "No internet connection."
+
+                    Mode.CONTINUOUS -> {
+                        if (error == SpeechRecognizer.ERROR_CLIENT || error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY) {
+                            destroyRecognizer()
+                        }
+                        if (isContinuousConfigured && !isContinuousPaused) {
+                            mainHandler.removeCallbacks(restartRunnable)
+                            mainHandler.postDelayed(restartRunnable, RESTART_DELAY_MS)
+                        } else {
+                            activeMode = Mode.IDLE
+                        }
                     }
-                    SpeechRecognizer.ERROR_AUDIO -> {
-                        if (isBn) "মাইক্রোফোন ত্রুটি হয়েছে।" else "Audio recording error."
-                    }
-                    SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> {
-                        if (isBn) "মাইক্রোফোনের অনুমতি প্রয়োজন।" else "Microphone permission is required."
-                    }
-                    else -> {
-                        if (isBn) "আমি কোনো প্রশ্ন শুনতে পাইনি।" else "I didn't hear a question."
+
+                    Mode.IDLE -> {
+                        // Inactive/cancelled; ignore error
                     }
                 }
-
-                onErrorCallback?.invoke(errorMessage)
             }
 
             override fun onResults(results: Bundle?) {
@@ -449,33 +534,47 @@ class Listener(private val context: Context) {
                 val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                 val spokenText = matches?.firstOrNull()?.trim()
 
-                // Check continuous command listening first
-                if (isContinuousListening && !isContinuousListeningPaused) {
-                    if (!spokenText.isNullOrEmpty()) {
-                        Log.d(TAG, "Continuous listener heard: $spokenText")
-                        val command = parseVoiceCommand(spokenText, activeLanguage)
-                        if (command != null) {
-                            Log.d(TAG, "Recognized Voice Command: $command")
-                            onCommandCallback?.invoke(command)
-                            return
+                when (activeMode) {
+                    Mode.SINGLE_SHOT -> {
+                        activeMode = Mode.IDLE
+                        val cb = onResultCallback
+                        val errCb = onErrorCallback
+                        clearSingleShotCallbacks()
+
+                        if (!spokenText.isNullOrEmpty()) {
+                            cb?.invoke(spokenText)
+                        } else {
+                            val fallback = if (activeLanguage.equals("bn", ignoreCase = true)) {
+                                "আমি কোনো প্রশ্ন শুনতে পাইনি।"
+                            } else {
+                                "I didn't hear a question."
+                            }
+                            errCb?.invoke(fallback)
                         }
                     }
-                    // No command recognized -> smoothly continue listening
-                    mainHandler.removeCallbacks(restartRunnable)
-                    mainHandler.postDelayed(restartRunnable, RESTART_DELAY_MS)
-                    return
-                }
 
-                // Single shot Ask mode
-                if (!spokenText.isNullOrEmpty()) {
-                    onResultCallback?.invoke(spokenText)
-                } else {
-                    val fallback = if (activeLanguage.equals("bn", ignoreCase = true)) {
-                        "আমি কোনো প্রশ্ন শুনতে পাইনি।"
-                    } else {
-                        "I didn't hear a question."
+                    Mode.CONTINUOUS -> {
+                        if (isContinuousConfigured && !isContinuousPaused) {
+                            if (!spokenText.isNullOrEmpty()) {
+                                Log.d(TAG, "Continuous listener heard: $spokenText")
+                                val command = parseVoiceCommand(spokenText, activeLanguage)
+                                if (command != null) {
+                                    Log.d(TAG, "Recognized Voice Command: $command")
+                                    onCommandCallback?.invoke(command)
+                                    return
+                                }
+                            }
+                            // No recognized command -> smoothly re-arm
+                            mainHandler.removeCallbacks(restartRunnable)
+                            mainHandler.postDelayed(restartRunnable, RESTART_DELAY_MS)
+                        } else {
+                            activeMode = Mode.IDLE
+                        }
                     }
-                    onErrorCallback?.invoke(fallback)
+
+                    Mode.IDLE -> {
+                        // Ignored
+                    }
                 }
             }
 

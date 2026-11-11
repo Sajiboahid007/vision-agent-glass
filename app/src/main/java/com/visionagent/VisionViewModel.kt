@@ -309,6 +309,7 @@ class VisionViewModel @JvmOverloads constructor(
             return
         }
 
+        listener.pauseContinuousListening()
         executeVisualAction("Describe") { apiKey, base64Image, model, lang ->
             geminiClient.describe(
                 apiKey = apiKey,
@@ -329,6 +330,7 @@ class VisionViewModel @JvmOverloads constructor(
             return
         }
 
+        listener.pauseContinuousListening()
         executeVisualAction("ReadText") { apiKey, base64Image, model, lang ->
             geminiClient.readText(
                 apiKey = apiKey,
@@ -362,6 +364,7 @@ class VisionViewModel @JvmOverloads constructor(
             return
         }
 
+        listener.pauseContinuousListening()
         activeJob?.cancel()
         activeJob = viewModelScope.launch {
             val startTime = System.currentTimeMillis()
@@ -386,6 +389,7 @@ class VisionViewModel @JvmOverloads constructor(
     }
 
     private fun processAskWithImage(question: String, startTime: Long) {
+        listener.pauseContinuousListening()
         activeJob?.cancel()
         activeJob = viewModelScope.launch {
             val currentSettings = settings.value
@@ -568,12 +572,18 @@ class VisionViewModel @JvmOverloads constructor(
      * Tests a candidate Gemini API key and speaks the result aloud.
      */
     suspend fun testApiKey(apiKey: String, model: String): Result<String> {
+        listener.pauseContinuousListening()
         val lang = settings.value.language
         val speechRate = settings.value.speechRate
         val result = geminiClient.testApiKey(apiKey = apiKey, model = model, language = lang)
         result.fold(
             onSuccess = { message ->
-                speaker.speak(message, language = lang, speechRate = speechRate)
+                speaker.speak(
+                    text = message,
+                    language = lang,
+                    speechRate = speechRate,
+                    onDone = { resumeVoiceCommandsIfEnabled() }
+                )
             },
             onFailure = { error ->
                 val errorMsg = if (error is GeminiException) {
@@ -581,7 +591,12 @@ class VisionViewModel @JvmOverloads constructor(
                 } else {
                     geminiClient.mapNetworkException(error, lang)
                 }
-                speaker.speak(errorMsg, language = lang, speechRate = speechRate)
+                speaker.speak(
+                    text = errorMsg,
+                    language = lang,
+                    speechRate = speechRate,
+                    onDone = { resumeVoiceCommandsIfEnabled() }
+                )
             }
         )
         return result
@@ -609,10 +624,17 @@ class VisionViewModel @JvmOverloads constructor(
         viewModelScope.launch {
             settingsRepository.updateLanguage(newLang)
             val announcement = if (newLang == "bn") "বাংলা ভাষা চালু করা হয়েছে" else "English language selected"
-            speaker.speak(announcement, language = newLang, speechRate = settings.value.speechRate)
-            if (settings.value.voiceCommandsEnabled && _uiState.value is UiState.Idle) {
-                startVoiceCommands(newLang)
-            }
+            listener.pauseContinuousListening()
+            speaker.speak(
+                text = announcement,
+                language = newLang,
+                speechRate = settings.value.speechRate,
+                onDone = {
+                    if (settings.value.voiceCommandsEnabled && _uiState.value is UiState.Idle) {
+                        startVoiceCommands(newLang)
+                    }
+                }
+            )
         }
     }
 
