@@ -75,8 +75,13 @@ class VisionViewModel @JvmOverloads constructor(
     private val _banglaMissingNotice = MutableStateFlow(false)
     val banglaMissingNotice: StateFlow<Boolean> = _banglaMissingNotice.asStateFlow()
 
+    private val _isLiveReading = MutableStateFlow(false)
+    val isLiveReading: StateFlow<Boolean> = _isLiveReading.asStateFlow()
+
     private var activeJob: Job? = null
     private var tickerJob: Job? = null
+    private var liveReadingJob: Job? = null
+    private var lastLiveReadText: String = ""
 
     val isSpeechRecognitionAvailable: Boolean
         get() = listener.isAvailable
@@ -114,6 +119,7 @@ class VisionViewModel @JvmOverloads constructor(
             is com.visionagent.speech.VoiceCommand.Stop -> stop()
             is com.visionagent.speech.VoiceCommand.Describe -> onDescribeTrigger()
             is com.visionagent.speech.VoiceCommand.ReadText -> onReadTextTrigger()
+            is com.visionagent.speech.VoiceCommand.LiveRead -> startLiveReading()
             is com.visionagent.speech.VoiceCommand.Ask -> {
                 if (!command.directQuestion.isNullOrBlank()) {
                     // Question spoken directly with wake word (e.g. "Vision, what is in front of me?")
@@ -128,7 +134,7 @@ class VisionViewModel @JvmOverloads constructor(
     }
 
     private fun resumeVoiceCommandsIfEnabled() {
-        if (settings.value.voiceCommandsEnabled && listener.isAvailable) {
+        if (!_isLiveReading.value && settings.value.voiceCommandsEnabled && listener.isAvailable) {
             listener.resumeContinuousListening()
         }
     }
@@ -146,6 +152,10 @@ class VisionViewModel @JvmOverloads constructor(
      * cancels recognizer, vibrates briefly, and resets to [UiState.Idle].
      */
     fun stop() {
+        liveReadingJob?.cancel()
+        liveReadingJob = null
+        _isLiveReading.value = false
+        lastLiveReadText = ""
         activeJob?.cancel()
         activeJob = null
         stopThinkingTicker()
@@ -155,6 +165,112 @@ class VisionViewModel @JvmOverloads constructor(
         _uiState.value = UiState.Idle
         resumeVoiceCommandsIfEnabled()
         Log.d(TAG, "Active action cancelled by user (Universal Stop)")
+    }
+
+    /**
+     * LIVE CONTINUOUS TEXT READING:
+     * Continuously scans and reads out signs, labels, doors, and text as the blind user moves around.
+     * Automatically filters duplicate text and stays silent when no new text is visible.
+     */
+    fun startLiveReading() {
+        if (_isLiveReading.value) {
+            stop()
+            return
+        }
+
+        val currentSettings = settings.value
+        val effectiveKey = getEffectiveApiKey()
+        if (effectiveKey.isBlank()) {
+            val errorMsg = geminiClient.mapHttpError(400, currentSettings.language)
+            speakError(errorMsg, currentSettings)
+            return
+        }
+
+        listener.pauseContinuousListening()
+        _isLiveReading.value = true
+        lastLiveReadText = ""
+        haptics.vibrateActionStart()
+
+        val startAnnouncement = if (currentSettings.language.equals("bn", ignoreCase = true)) {
+            "লাইভ টেক্সট রিডিং শুরু হয়েছে। হাঁটার সাথে সাথে লেখা পড়ে শোনানো হবে।"
+        } else {
+            "Live text reading active. Scanning while moving."
+        }
+
+        liveReadingJob?.cancel()
+        liveReadingJob = viewModelScope.launch {
+            speaker.speak(startAnnouncement, language = currentSettings.language, speechRate = currentSettings.speechRate)
+            delay(1800)
+
+            while (isActive && _isLiveReading.value) {
+                try {
+                    // 1. Capture camera frame
+                    _uiState.value = UiState.Capturing
+                    val imageProxy = cameraController.captureImage()
+
+                    // 2. Downscale & process
+                    _uiState.value = UiState.Thinking
+                    haptics.vibrateGentleTick()
+                    val base64Image = ImageUtils.processImageForGemini(imageProxy)
+
+                    // 3. Ask Gemini for new visible text
+                    val result = geminiClient.readLiveText(
+                        apiKey = effectiveKey,
+                        base64Image = base64Image,
+                        model = currentSettings.model,
+                        language = currentSettings.language,
+                        lastReadText = lastLiveReadText
+                    )
+
+                    result.fold(
+                        onSuccess = { newText ->
+                            val cleanText = newText.trim()
+                            if (cleanText.isNotEmpty() &&
+                                !cleanText.equals("[NONE]", ignoreCase = true) &&
+                                !cleanText.equals("NONE", ignoreCase = true) &&
+                                !cleanText.equals("\"[NONE]\"", ignoreCase = true) &&
+                                !isTextSimilar(cleanText, lastLiveReadText)
+                            ) {
+                                lastLiveReadText = cleanText
+                                _uiState.value = UiState.Speaking
+                                haptics.vibrateAnswerStart()
+
+                                val waitJob = kotlinx.coroutines.CompletableDeferred<Unit>()
+                                speaker.speak(
+                                    text = cleanText,
+                                    language = currentSettings.language,
+                                    speechRate = currentSettings.speechRate,
+                                    onDone = { waitJob.complete(Unit) }
+                                )
+                                waitJob.await()
+                            }
+                        },
+                        onFailure = { error ->
+                            Log.w(TAG, "Live text read cycle error: ${error.message}")
+                        }
+                    )
+
+                    if (_isLiveReading.value) {
+                        _uiState.value = UiState.Idle
+                        delay(1200) // Brief pause while walking before capturing next frame
+                    }
+                } catch (e: CancellationException) {
+                    break
+                } catch (e: Exception) {
+                    Log.w(TAG, "Live text scan loop exception: ${e.message}")
+                    delay(2000)
+                }
+            }
+        }
+    }
+
+    private fun isTextSimilar(text1: String, text2: String): Boolean {
+        if (text1.isBlank() || text2.isBlank()) return false
+        val t1 = text1.lowercase().trim()
+        val t2 = text2.lowercase().trim()
+        if (t1 == t2) return true
+        if (t1.contains(t2) || t2.contains(t1)) return true
+        return false
     }
 
     /**

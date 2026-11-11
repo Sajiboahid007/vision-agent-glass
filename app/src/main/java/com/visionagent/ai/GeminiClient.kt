@@ -90,6 +90,24 @@ class GeminiClient(
                 "You are the eyes of a blind person. Answer their question about this photo briefly and clearly in English, in plain spoken language with no markdown. If you cannot tell from the image, say so honestly. Question: $question"
             }
         }
+
+        /**
+         * Builds the LIVE READ prompt for continuous text scanning while moving.
+         */
+        fun buildLiveReadPrompt(language: String, lastText: String): String {
+            val isBn = language.equals("bn", ignoreCase = true)
+            val cleanLast = lastText.trim().replace("\"", "'")
+            return if (isBn) {
+                "আপনি একজন অন্ধ ব্যক্তির লাইভ সহকারী। ব্যক্তিটি বিভিন্ন স্থানে হাঁটছেন বা স্থান পরিবর্তন করছেন। " +
+                "এই দৃশ্যে কোনো নতুন বা গুরুত্বপূর্ণ সাইনবোর্ড, দরজার নম্বর, পণ্যের নাম, বা দিকনির্দেশনা থাকলে সর্বোচ্চ ১টি সংক্ষিপ্ত বাক্যে বলুন। " +
+                "পূর্বে পড়া লেখা: \"$cleanLast\"। " +
+                "যদি নতুন কোনো লেখা না থাকে বা আগের লেখাই থাকে, তবে শুধুমাত্র [NONE] লিখুন। কথ্য বাংলায় দ্রুত বলুন, কোনো মার্কডাউন নেই।"
+            } else {
+                "You are reading live text for a moving blind person. Read any new visible signs, room numbers, labels, or directions in 1 concise sentence. " +
+                "Previously read: \"$cleanLast\". " +
+                "If no new or changed readable text is visible, respond only with [NONE]. Plain spoken English, no markdown."
+            }
+        }
     }
 
     /**
@@ -133,6 +151,27 @@ class GeminiClient(
     }
 
     /**
+     * Executes Live Continuous Text Reading while moving.
+     */
+    suspend fun readLiveText(
+        apiKey: String,
+        base64Image: String,
+        model: String = DEFAULT_MODEL,
+        language: String = "en",
+        lastReadText: String = ""
+    ): Result<String> {
+        val prompt = buildLiveReadPrompt(language, lastReadText)
+        return generateContent(
+            apiKey = apiKey,
+            model = model,
+            base64Image = base64Image,
+            prompt = prompt,
+            language = language,
+            maxTokens = 100
+        )
+    }
+
+    /**
      * Sends a multimodal generateContent request to Gemini with an image and text prompt.
      */
     suspend fun generateContent(
@@ -140,7 +179,8 @@ class GeminiClient(
         model: String = DEFAULT_MODEL,
         base64Image: String,
         prompt: String,
-        language: String = "en"
+        language: String = "en",
+        maxTokens: Int = 150
     ): Result<String> = withContext(Dispatchers.IO) {
         if (apiKey.isBlank()) {
             val error = mapHttpError(400, language)
@@ -173,7 +213,7 @@ class GeminiClient(
                 }
                 put("contents", contents)
                 put("generationConfig", JSONObject().apply {
-                    put("maxOutputTokens", 150)
+                    put("maxOutputTokens", maxTokens)
                     put("temperature", 0.2)
                 })
             }

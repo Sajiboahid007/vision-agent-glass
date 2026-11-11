@@ -32,6 +32,11 @@ sealed class VoiceCommand {
     object ReadText : VoiceCommand()
 
     /**
+     * Triggers Live Continuous Text Reading mode while moving ("live read", "live text").
+     */
+    object LiveRead : VoiceCommand()
+
+    /**
      * Triggers Universal Stop ("stop vision", "stop").
      */
     object Stop : VoiceCommand()
@@ -81,7 +86,16 @@ class Listener(private val context: Context) {
                 return VoiceCommand.Describe
             }
 
-            // 3. Read Text ("vision read", "read text", "read this")
+            // 3. Live Text Reading while moving ("live read", "live text", "live reading")
+            if (text.contains("live read") ||
+                text.contains("live reading") ||
+                text.contains("live text") ||
+                text.contains("read live") ||
+                (isBn && (text.contains("লাইভ পড়ো") || text.contains("লাইভ রিডিং") || text.contains("চলমান রিডিং")))) {
+                return VoiceCommand.LiveRead
+            }
+
+            // 4. Read Text ("vision read", "read text", "read this")
             if (text.contains("vision read") ||
                 text.contains("read text") ||
                 text.contains("read this") ||

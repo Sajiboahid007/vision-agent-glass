@@ -12,6 +12,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -53,6 +54,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -103,7 +105,8 @@ fun MainScreen(
     val uiState by viewModel.uiState.collectAsState()
     val settings by viewModel.settings.collectAsState()
     val banglaMissing by viewModel.banglaMissingNotice.collectAsState()
-    val isBusy = uiState !is UiState.Idle
+    val isLiveReading by viewModel.isLiveReading.collectAsState()
+    val isBusy = (uiState !is UiState.Idle) || isLiveReading
     val isBn = settings.language.equals("bn", ignoreCase = true)
 
     // Bind CameraX with or without PreviewView depending on showCameraPreview setting
@@ -227,9 +230,9 @@ fun MainScreen(
         // --- HANDS-FREE VOICE CONTROL PROMPT BANNER ---
         if (settings.voiceCommandsEnabled) {
             val voicePrompt = if (isBn) {
-                "কথা বলুন: \"বলো ভিশন\", \"কি দেখছো\", বা \"থামো ভিশন\""
+                "কথা বলুন: \"বলো ভিশন\", \"লাইভ রিডিং\", বা \"থামো\""
             } else {
-                "Say \"Vision\", \"Tell me vision\", or \"Stop vision\""
+                "Say \"Vision\", \"Live read\", \"Tell me vision\", or \"Stop vision\""
             }
             Row(
                 modifier = Modifier
@@ -323,22 +326,34 @@ fun MainScreen(
         }
 
         // --- STATUS ANNOUNCEMENT BANNER (Polite Live Region for TalkBack) ---
-        val statusText = when (val state = uiState) {
-            is UiState.Idle -> if (isBn) "প্রস্তুত" else "Ready"
-            is UiState.Capturing -> if (isBn) "ছবি তোলা হচ্ছে..." else "Capturing photo..."
-            is UiState.Thinking -> if (isBn) "বিশ্লেষণ করা হচ্ছে..." else "Thinking..."
-            is UiState.Speaking -> if (isBn) "উত্তর দেওয়া হচ্ছে..." else "Speaking..."
-            is UiState.Listening -> if (isBn) "আপনার প্রশ্ন শুনছি..." else "Listening for question..."
-            is UiState.Error -> state.message
+        val statusText = if (isLiveReading) {
+            when (uiState) {
+                is UiState.Speaking -> if (isBn) "পড়ছি..." else "Reading..."
+                is UiState.Thinking -> if (isBn) "লাইভ বিশ্লেষণ চলছে..." else "Analyzing live..."
+                else -> if (isBn) "চলমান লাইভ রিডিং..." else "Live reading active..."
+            }
+        } else {
+            when (val state = uiState) {
+                is UiState.Idle -> if (isBn) "প্রস্তুত" else "Ready"
+                is UiState.Capturing -> if (isBn) "ছবি তোলা হচ্ছে..." else "Capturing photo..."
+                is UiState.Thinking -> if (isBn) "বিশ্লেষণ করা হচ্ছে..." else "Thinking..."
+                is UiState.Speaking -> if (isBn) "উত্তর দেওয়া হচ্ছে..." else "Speaking..."
+                is UiState.Listening -> if (isBn) "আপনার প্রশ্ন শুনছি..." else "Listening for question..."
+                is UiState.Error -> state.message
+            }
         }
 
-        val bannerBackground = when (uiState) {
-            is UiState.Error -> HighContrastError
-            is UiState.Thinking -> DescribeYellow
-            is UiState.Speaking -> AskLime
-            is UiState.Listening -> ReadCyan
-            is UiState.Capturing -> DescribeYellow
-            is UiState.Idle -> DarkSurfaceElevated
+        val bannerBackground = if (isLiveReading) {
+            Color(0xFFFFB74D) // Amber for active live reading
+        } else {
+            when (uiState) {
+                is UiState.Error -> HighContrastError
+                is UiState.Thinking -> DescribeYellow
+                is UiState.Speaking -> AskLime
+                is UiState.Listening -> ReadCyan
+                is UiState.Capturing -> DescribeYellow
+                is UiState.Idle -> DarkSurfaceElevated
+            }
         }
 
         val bannerTextColor = when (uiState) {
@@ -411,28 +426,74 @@ fun MainScreen(
                 }
             )
 
-            // 2. READ TEXT BUTTON (Middle, flex weight 1.0, minimum 28sp text)
-            BigActionButton(
-                label = if (isBusy) (if (isBn) "থামুন" else "STOP") else (if (isBn) "লেখা পড়ুন" else "READ TEXT"),
-                subtitle = if (isBusy) (if (isBn) "বাতিল করতে ট্যাপ করুন" else "Tap to cancel active action") else (if (isBn) "কাগজ বা সাইনবোর্ড। ভলিউম ডাউন কী" else "Read visible text. Shortcut: Volume Down"),
-                backgroundColor = ReadCyan,
-                textStyle = SecondaryActionButtonTextStyle,
-                contentDescription = if (isBusy) {
-                    if (isBn) "চলমান কাজ বন্ধ করুন" else "Stop current operation"
-                } else {
-                    if (isBn) "দৃশ্যমান সব লেখা পড়ুন। শর্টকাট: ভলিউম ডাউন কী।" else "Read visible text in the scene. Shortcut: Volume Down key."
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1.0f),
-                onClick = {
-                    if (isBusy) {
-                        viewModel.stop()
-                    } else {
-                        viewModel.onReadTextTrigger()
-                    }
+            // 2. READ TEXT / LIVE READING BUTTON SECTION
+            if (isLiveReading) {
+                // When actively reading live text while moving
+                BigActionButton(
+                    label = if (isBn) "লাইভ রিডিং থামান" else "STOP LIVE READ",
+                    subtitle = if (isBn) "হাঁটার সময় স্ক্যান চলছে • ট্যাপ করে থামান" else "Scanning live while moving • Tap to stop",
+                    backgroundColor = HighContrastError,
+                    textStyle = SecondaryActionButtonTextStyle,
+                    contentDescription = if (isBn) "লাইভ রিডিং বন্ধ করতে ট্যাপ করুন" else "Stop live continuous text reading",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1.0f),
+                    onClick = { viewModel.stop() }
+                )
+            } else {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1.0f),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Single photo read (Volume Down shortcut)
+                    BigActionButton(
+                        label = if (isBusy) (if (isBn) "থামুন" else "STOP") else (if (isBn) "লেখা পড়ুন" else "READ TEXT"),
+                        subtitle = if (isBusy) (if (isBn) "বাতিল করুন" else "Tap to stop") else (if (isBn) "ছবি তুলে পড়া • ভলিউম ডাউন" else "Photo read • Vol Down"),
+                        backgroundColor = ReadCyan,
+                        textStyle = SecondaryActionButtonTextStyle.copy(fontSize = 22.sp, lineHeight = 26.sp),
+                        contentDescription = if (isBusy) {
+                            if (isBn) "চলমান কাজ বন্ধ করুন" else "Stop current operation"
+                        } else {
+                            if (isBn) "দৃশ্যমান সব লেখা পড়ুন। শর্টকাট: ভলিউম ডাউন কী।" else "Read visible text in the scene. Shortcut: Volume Down key."
+                        },
+                        modifier = Modifier
+                            .weight(0.58f)
+                            .fillMaxHeight(),
+                        onClick = {
+                            if (isBusy) {
+                                viewModel.stop()
+                            } else {
+                                viewModel.onReadTextTrigger()
+                            }
+                        }
+                    )
+
+                    // Continuous Live Read while walking/moving
+                    BigActionButton(
+                        label = if (isBusy) (if (isBn) "থামুন" else "STOP") else (if (isBn) "লাইভ ⚡" else "LIVE ⚡"),
+                        subtitle = if (isBusy) (if (isBn) "বাতিল করুন" else "Tap to stop") else (if (isBn) "হাঁটার সময়" else "While moving"),
+                        backgroundColor = Color(0xFFFFB74D), // High-visibility Amber / Bright Warning Orange
+                        textStyle = SecondaryActionButtonTextStyle.copy(fontSize = 22.sp, lineHeight = 26.sp),
+                        contentDescription = if (isBusy) {
+                            if (isBn) "চলমান কাজ বন্ধ করুন" else "Stop current operation"
+                        } else {
+                            if (isBn) "হাঁটার সময় লাইভ ক্যামেরা দিয়ে স্বয়ংক্রিয় লেখা পড়তে শুরু করুন" else "Start continuous live camera text reading while moving"
+                        },
+                        modifier = Modifier
+                            .weight(0.42f)
+                            .fillMaxHeight(),
+                        onClick = {
+                            if (isBusy) {
+                                viewModel.stop()
+                            } else {
+                                viewModel.startLiveReading()
+                            }
+                        }
+                    )
                 }
-            )
+            }
 
             // 3. ASK BUTTON (Bottom, flex weight 1.0, minimum 28sp text)
             if (viewModel.isSpeechRecognitionAvailable) {
@@ -497,7 +558,6 @@ private fun BigActionButton(
     Button(
         onClick = onClick,
         modifier = modifier
-            .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .semantics {
                 this.contentDescription = contentDescription
@@ -506,25 +566,32 @@ private fun BigActionButton(
             containerColor = backgroundColor,
             contentColor = ButtonTextDark
         ),
+        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp),
         shape = RoundedCornerShape(16.dp)
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
-            modifier = Modifier.padding(vertical = 4.dp)
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(vertical = 2.dp)
         ) {
             Text(
                 text = label,
                 style = textStyle,
-                textAlign = TextAlign.Center
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = subtitle,
-                fontSize = 14.sp,
+                fontSize = 13.sp,
                 fontWeight = FontWeight.Bold,
                 color = ButtonTextDark.copy(alpha = 0.85f),
-                textAlign = TextAlign.Center
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }
