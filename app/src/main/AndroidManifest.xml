@@ -15,13 +15,23 @@
         android:name="android.hardware.microphone"
         android:required="false" />
 
+    <!-- Queries for TextToSpeech and SpeechRecognizer on Android 11+ (API 30+) -->
+    <queries>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+    </queries>
+
     <application
         android:allowBackup="true"
         android:icon="@android:drawable/sym_def_app_icon"
         android:label="@string/app_name"
         android:roundIcon="@android:drawable/sym_def_app_icon"
         android:supportsRtl="true"
-        android:theme="@android:style/Theme.Material.NoActionBar">
+        android:theme="@style/Theme.VisionAgent">
         <activity
             android:name=".MainActivity"
             android:exported="true"

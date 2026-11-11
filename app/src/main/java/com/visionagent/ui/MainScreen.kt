@@ -175,14 +175,17 @@ fun MainScreen(
                     factory = { ctx ->
                         PreviewView(ctx).apply {
                             implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+                        }.also { previewView ->
+                            coroutineScope.launch {
+                                try {
+                                    viewModel.cameraController.bindCamera(lifecycleOwner, previewView)
+                                } catch (e: Exception) {
+                                    android.util.Log.e("MainScreen", "Error binding camera preview", e)
+                                }
+                            }
                         }
                     },
-                    modifier = Modifier.fillMaxSize(),
-                    update = { previewView ->
-                        coroutineScope.launch {
-                            viewModel.cameraController.bindCamera(lifecycleOwner, previewView)
-                        }
-                    }
+                    modifier = Modifier.fillMaxSize()
                 )
             }
         }

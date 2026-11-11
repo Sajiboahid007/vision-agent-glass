@@ -59,10 +59,18 @@ class CameraController(private val context: Context) {
         activeLifecycleOwner = lifecycleOwner
         activePreviewView = previewView
 
-        val provider = getCameraProvider()
-        cameraProvider = provider
+        if (ContextCompat.checkSelfPermission(
+                context,
+                android.Manifest.permission.CAMERA
+            ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            Log.w(TAG, "Cannot bind camera yet: CAMERA permission has not been granted")
+            return@withContext
+        }
 
         try {
+            val provider = getCameraProvider()
+            cameraProvider = provider
             provider.unbindAll()
 
             val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
@@ -95,7 +103,6 @@ class CameraController(private val context: Context) {
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to bind camera use cases: ${e.message}", e)
-            throw e
         }
     }
 

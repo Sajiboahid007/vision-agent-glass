@@ -67,7 +67,11 @@ class Speaker(
     private var activeDoneCallback: (() -> Unit)? = null
 
     init {
-        tts = TextToSpeech(context.applicationContext, this)
+        try {
+            tts = TextToSpeech(context.applicationContext, this)
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception initializing TextToSpeech: ${e.message}", e)
+        }
     }
 
     override fun onInit(status: Int) {

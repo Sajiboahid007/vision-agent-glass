@@ -47,7 +47,7 @@ sealed class UiState {
  * - Latency tracking: Logs duration from trigger to speech start via Log.d("VisionAgent", ...).
  * - Thinking ticker: Pulsing gentle haptic tick every 1500ms while waiting for Gemini.
  */
-class VisionViewModel(
+class VisionViewModel @JvmOverloads constructor(
     application: Application,
     val settingsRepository: SettingsRepository = SettingsRepository(application),
     val cameraController: CameraController = CameraController(application),
