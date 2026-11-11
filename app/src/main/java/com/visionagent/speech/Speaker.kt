@@ -166,9 +166,7 @@ class Speaker(
             tts?.language = Locale.US
             onBanglaMissing?.invoke()
 
-            val fallbackExplanation = "Bangla voice is not installed. Falling back to English. " +
-                    "Please install the Bangla voice in your Text to Speech settings. " + cleanedText
-
+            val fallbackExplanation = "Bangla voice data is missing. Please install the Bangla voice in Text to Speech settings. " + cleanedText
             speakInternal(fallbackExplanation, onStarted, onDone)
             return
         }
@@ -183,19 +181,21 @@ class Speaker(
     private fun applyBanglaLanguage(): Boolean {
         val ttsEngine = tts ?: return false
 
-        // Check Locale("bn", "BD") then Locale("bn")
-        val localeBD = Locale("bn", "BD")
-        val resultBD = ttsEngine.isLanguageAvailable(localeBD)
-        if (resultBD >= TextToSpeech.LANG_AVAILABLE) {
-            ttsEngine.language = localeBD
-            return true
-        }
+        // Check Locale("bn", "BD") then Locale("bn", "IN") then Locale("bn")
+        val candidateLocales = listOf(
+            Locale("bn", "BD"),
+            Locale("bn", "IN"),
+            Locale("bn")
+        )
 
-        val localeGeneric = Locale("bn")
-        val resultGeneric = ttsEngine.isLanguageAvailable(localeGeneric)
-        if (resultGeneric >= TextToSpeech.LANG_AVAILABLE) {
-            ttsEngine.language = localeGeneric
-            return true
+        for (loc in candidateLocales) {
+            try {
+                val result = ttsEngine.isLanguageAvailable(loc)
+                if (result >= TextToSpeech.LANG_AVAILABLE) {
+                    ttsEngine.language = loc
+                    return true
+                }
+            } catch (_: Exception) {}
         }
 
         return false

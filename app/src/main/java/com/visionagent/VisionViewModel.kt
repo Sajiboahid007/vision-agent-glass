@@ -484,6 +484,22 @@ class VisionViewModel @JvmOverloads constructor(
         viewModelScope.launch { settingsRepository.updateLanguage(language) }
     }
 
+    /**
+     * Toggles between English and Bangla directly, speaking a confirmation aloud.
+     */
+    fun toggleLanguage() {
+        val currentLang = settings.value.language
+        val newLang = if (currentLang.equals("bn", ignoreCase = true)) "en" else "bn"
+        viewModelScope.launch {
+            settingsRepository.updateLanguage(newLang)
+            val announcement = if (newLang == "bn") "বাংলা ভাষা চালু করা হয়েছে" else "English language selected"
+            speaker.speak(announcement, language = newLang, speechRate = settings.value.speechRate)
+            if (settings.value.voiceCommandsEnabled && _uiState.value is UiState.Idle) {
+                startVoiceCommands(newLang)
+            }
+        }
+    }
+
     fun updateSpeechRate(rate: Float) {
         viewModelScope.launch { settingsRepository.updateSpeechRate(rate) }
     }

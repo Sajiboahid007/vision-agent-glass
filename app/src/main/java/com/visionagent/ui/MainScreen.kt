@@ -104,6 +104,7 @@ fun MainScreen(
     val settings by viewModel.settings.collectAsState()
     val banglaMissing by viewModel.banglaMissingNotice.collectAsState()
     val isBusy = uiState !is UiState.Idle
+    val isBn = settings.language.equals("bn", ignoreCase = true)
 
     // Bind CameraX with or without PreviewView depending on showCameraPreview setting
     LaunchedEffect(settings.showCameraPreview, lifecycleOwner) {
@@ -133,7 +134,7 @@ fun MainScreen(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(
-                text = "VISION AGENT",
+                text = if (isBn) "ভিশন এজেন্ট" else "VISION AGENT",
                 style = MaterialTheme.typography.titleLarge.copy(
                     fontWeight = FontWeight.Black,
                     color = HighContrastWhite,
@@ -142,6 +143,32 @@ fun MainScreen(
             )
 
             Row(verticalAlignment = Alignment.CenterVertically) {
+                // Quick 1-Tap Language Switcher (EN / বাংলা)
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (isBn) DescribeYellow else DarkSurfaceElevated)
+                        .clickable { viewModel.toggleLanguage() }
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                        .semantics {
+                            contentDescription = if (isBn) {
+                                "বর্তমান ভাষা বাংলা। ইংরেজিতে পরিবর্তন করতে ট্যাপ করুন।"
+                            } else {
+                                "Current language English. Tap to switch to Bangla."
+                            }
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = if (isBn) "বাংলা" else "EN",
+                        color = if (isBn) ButtonTextDark else HighContrastWhite,
+                        fontWeight = FontWeight.Black,
+                        fontSize = 15.sp
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(6.dp))
+
                 // Voice Control toggle icon button
                 IconButton(
                     onClick = {
@@ -151,9 +178,9 @@ fun MainScreen(
                         .size(48.dp)
                         .semantics {
                             contentDescription = if (settings.voiceCommandsEnabled) {
-                                "Hands-free voice control enabled. Tap to disable."
+                                if (isBn) "ভয়েস কমান্ড সক্রিয়। বন্ধ করতে ট্যাপ করুন।" else "Hands-free voice control enabled. Tap to disable."
                             } else {
-                                "Hands-free voice control disabled. Tap to enable."
+                                if (isBn) "ভয়েস কমান্ড নিষ্ক্রিয়। চালু করতে ট্যাপ করুন।" else "Hands-free voice control disabled. Tap to enable."
                             }
                         }
                 ) {
@@ -176,7 +203,7 @@ fun MainScreen(
                     modifier = Modifier
                         .size(48.dp)
                         .semantics {
-                            contentDescription = "Open Settings screen"
+                            contentDescription = if (isBn) "সেটিংস খুলুন" else "Open Settings screen"
                         }
                 ) {
                     Icon(
@@ -191,13 +218,18 @@ fun MainScreen(
 
         // --- HANDS-FREE VOICE CONTROL PROMPT BANNER ---
         if (settings.voiceCommandsEnabled) {
+            val voicePrompt = if (isBn) {
+                "কথা বলুন: \"বলো ভিশন\", \"কি দেখছো\", বা \"থামো ভিশন\""
+            } else {
+                "Say \"Vision\", \"Tell me vision\", or \"Stop vision\""
+            }
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(DarkSurfaceElevated)
                     .padding(horizontal = 16.dp, vertical = 6.dp)
                     .semantics {
-                        contentDescription = "Voice Control Active. Say Vision, Tell me vision, or Stop vision."
+                        contentDescription = voicePrompt
                     },
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -209,7 +241,7 @@ fun MainScreen(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "Say \"Vision\", \"Tell me vision\", or \"Stop vision\"",
+                    text = voicePrompt,
                     style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
                     color = HighContrastWhite
                 )
@@ -284,11 +316,11 @@ fun MainScreen(
 
         // --- STATUS ANNOUNCEMENT BANNER (Polite Live Region for TalkBack) ---
         val statusText = when (val state = uiState) {
-            is UiState.Idle -> "Ready"
-            is UiState.Capturing -> "Capturing photo..."
-            is UiState.Thinking -> "Thinking..."
-            is UiState.Speaking -> "Speaking..."
-            is UiState.Listening -> "Listening for question..."
+            is UiState.Idle -> if (isBn) "প্রস্তুত" else "Ready"
+            is UiState.Capturing -> if (isBn) "ছবি তোলা হচ্ছে..." else "Capturing photo..."
+            is UiState.Thinking -> if (isBn) "বিশ্লেষণ করা হচ্ছে..." else "Thinking..."
+            is UiState.Speaking -> if (isBn) "উত্তর দেওয়া হচ্ছে..." else "Speaking..."
+            is UiState.Listening -> if (isBn) "আপনার প্রশ্ন শুনছি..." else "Listening for question..."
             is UiState.Error -> state.message
         }
 
@@ -316,7 +348,7 @@ fun MainScreen(
                 }
                 .semantics {
                     liveRegion = LiveRegionMode.Polite
-                    contentDescription = if (isBusy) "$statusText. Tap to stop." else statusText
+                    contentDescription = if (isBusy) "$statusText. ${if (isBn) "থামতে ট্যাপ করুন।" else "Tap to stop."}" else statusText
                 },
             contentAlignment = Alignment.Center
         ) {
@@ -334,7 +366,7 @@ fun MainScreen(
                     Spacer(modifier = Modifier.width(8.dp))
                 }
                 Text(
-                    text = if (isBusy) "$statusText (TAP TO STOP)" else statusText,
+                    text = if (isBusy) "$statusText (${if (isBn) "থামতে ট্যাপ করুন" else "TAP TO STOP"})" else statusText,
                     style = StatusBannerTextStyle.copy(color = bannerTextColor),
                     textAlign = TextAlign.Center
                 )
@@ -350,14 +382,14 @@ fun MainScreen(
         ) {
             // 1. DESCRIBE BUTTON (Top, flex weight ~1.3, minimum 32sp text)
             BigActionButton(
-                label = if (isBusy) "STOP" else "DESCRIBE",
-                subtitle = if (isBusy) "Tap to cancel active action" else "Describe scene ahead. Shortcut: Volume Up",
+                label = if (isBusy) (if (isBn) "থামুন" else "STOP") else (if (isBn) "বর্ণনা করুন" else "DESCRIBE"),
+                subtitle = if (isBusy) (if (isBn) "বাতিল করতে ট্যাপ করুন" else "Tap to cancel active action") else (if (isBn) "সামনের দৃশ্য ও বাধা। ভলিউম আপ কী" else "Describe scene ahead. Shortcut: Volume Up"),
                 backgroundColor = DescribeYellow,
                 textStyle = DescribeButtonTextStyle,
                 contentDescription = if (isBusy) {
-                    "Stop current operation"
+                    if (isBn) "চলমান কাজ বন্ধ করুন" else "Stop current operation"
                 } else {
-                    "Describe the scene ahead. Shortcut: Volume Up key."
+                    if (isBn) "সামনের দৃশ্য ও বাধা বর্ণনা করুন। শর্টকাট: ভলিউম আপ কী।" else "Describe the scene ahead. Shortcut: Volume Up key."
                 },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -373,14 +405,14 @@ fun MainScreen(
 
             // 2. READ TEXT BUTTON (Middle, flex weight 1.0, minimum 28sp text)
             BigActionButton(
-                label = if (isBusy) "STOP" else "READ TEXT",
-                subtitle = if (isBusy) "Tap to cancel active action" else "Read visible text. Shortcut: Volume Down",
+                label = if (isBusy) (if (isBn) "থামুন" else "STOP") else (if (isBn) "লেখা পড়ুন" else "READ TEXT"),
+                subtitle = if (isBusy) (if (isBn) "বাতিল করতে ট্যাপ করুন" else "Tap to cancel active action") else (if (isBn) "কাগজ বা সাইনবোর্ড। ভলিউম ডাউন কী" else "Read visible text. Shortcut: Volume Down"),
                 backgroundColor = ReadCyan,
                 textStyle = SecondaryActionButtonTextStyle,
                 contentDescription = if (isBusy) {
-                    "Stop current operation"
+                    if (isBn) "চলমান কাজ বন্ধ করুন" else "Stop current operation"
                 } else {
-                    "Read visible text in the scene. Shortcut: Volume Down key."
+                    if (isBn) "দৃশ্যমান সব লেখা পড়ুন। শর্টকাট: ভলিউম ডাউন কী।" else "Read visible text in the scene. Shortcut: Volume Down key."
                 },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -397,14 +429,14 @@ fun MainScreen(
             // 3. ASK BUTTON (Bottom, flex weight 1.0, minimum 28sp text)
             if (viewModel.isSpeechRecognitionAvailable) {
                 BigActionButton(
-                    label = if (isBusy) "STOP" else "ASK",
-                    subtitle = if (isBusy) "Tap to cancel active action" else "Speak a question about what is ahead",
+                    label = if (isBusy) (if (isBn) "থামুন" else "STOP") else (if (isBn) "প্রশ্ন করুন" else "ASK"),
+                    subtitle = if (isBusy) (if (isBn) "বাতিল করতে ট্যাপ করুন" else "Tap to cancel active action") else (if (isBn) "মুখে প্রশ্ন বলুন" else "Speak a question about what is ahead"),
                     backgroundColor = AskLime,
                     textStyle = SecondaryActionButtonTextStyle,
                     contentDescription = if (isBusy) {
-                        "Stop current operation"
+                        if (isBn) "চলমান কাজ বন্ধ করুন" else "Stop current operation"
                     } else {
-                        "Ask a question by speaking. Photo and voice question will be sent."
+                        if (isBn) "কথা বলে প্রশ্ন করুন। ছবি ও আপনার প্রশ্ন পাঠানো হবে।" else "Ask a question by speaking. Photo and voice question will be sent."
                     },
                     modifier = Modifier
                         .fillMaxWidth()

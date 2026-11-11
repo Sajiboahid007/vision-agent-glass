@@ -33,9 +33,11 @@ class GeminiException(
  */
 class GeminiClient(
     private val client: OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
-        .writeTimeout(30, TimeUnit.SECONDS)
+        .connectTimeout(10, TimeUnit.SECONDS)
+        .readTimeout(20, TimeUnit.SECONDS)
+        .writeTimeout(15, TimeUnit.SECONDS)
+        .connectionPool(okhttp3.ConnectionPool(5, 5, TimeUnit.MINUTES))
+        .retryOnConnectionFailure(true)
         .build()
 ) {
 
@@ -55,31 +57,38 @@ class GeminiClient(
          * Builds the DESCRIBE prompt for safe navigation.
          */
         fun buildDescribePrompt(language: String): String {
-            val lang = getLanguagePromptName(language)
-            return "You are the eyes of a blind person. This photo was taken by their phone camera pointing forward. " +
-                    "In 2–3 short sentences: describe the scene, name obstacles or hazards with direction (left, ahead, right) " +
-                    "and rough distance in steps, and say if the path ahead looks clear. " +
-                    "Skip details that do not matter for safety. Plain spoken language, no markdown, no lists. Respond in $lang."
+            val isBn = language.equals("bn", ignoreCase = true)
+            return if (isBn) {
+                "আপনি একজন অন্ধ ব্যক্তির চোখ। সামনের দৃশ্য দেখে সর্বোচ্চ ২ টি সংক্ষিপ্ত বাক্যে স্বাভাবিক কথ্য বাংলায় বলুন: সামনে কোনো বাধা বা বিপদ আছে কি না (বামে, সামনে বা ডানে কয় কদম দূরে) এবং চলার পথ পরিষ্কার কি না। দ্রুত উত্তর দিন। কোনো মার্কডাউন বা লিস্ট ব্যবহার করবেন না।"
+            } else {
+                "You are the eyes of a blind person. This photo was taken by their phone camera pointing forward. " +
+                "In 1–2 short sentences: describe the scene, obstacles or hazards with direction (left, ahead, right) and steps, and say if the path is clear. " +
+                "Skip non-safety details. Plain spoken language, no markdown, no lists. Respond in English."
+            }
         }
 
         /**
          * Builds the READ TEXT prompt for reading signs, screens, documents, medicine packets, etc.
          */
         fun buildReadTextPrompt(language: String): String {
-            val lang = getLanguagePromptName(language)
-            return "Read out all readable text in this image (signs, labels, screens, documents, medicine packets, money notes) " +
-                    "exactly as written, in natural reading order. Then, in one short sentence in $lang, say what the item is. " +
-                    "If there is no readable text, say only that no text was found, in $lang. Plain text, no markdown."
+            val isBn = language.equals("bn", ignoreCase = true)
+            return if (isBn) {
+                "এই ছবিতে থাকা সব লেখা স্বাভাবিক পড়ার নিয়মে বাংলায় হুবহু পড়ে শোনান। তারপর একটি ছোট বাক্যে বলুন জিনিসটি কী। কোনো লেখা না থাকলে শুধু বলুন কোনো লেখা পাওয়া যায়নি। কোনো মার্কডাউন ব্যবহার করবেন না।"
+            } else {
+                "Read out all readable text in this image exactly as written, in natural reading order. Then in one short sentence, say what the item is. If no readable text, say only that no text was found. Plain text, no markdown. Respond in English."
+            }
         }
 
         /**
          * Builds the ASK prompt for answering the user's spoken voice question.
          */
         fun buildAskPrompt(question: String, language: String): String {
-            val lang = getLanguagePromptName(language)
-            return "You are the eyes of a blind person. Answer their question about this photo briefly and clearly in $lang, " +
-                    "in plain spoken language with no markdown. If you cannot tell from the image, say so honestly. " +
-                    "Question: $question"
+            val isBn = language.equals("bn", ignoreCase = true)
+            return if (isBn) {
+                "আপনি একজন অন্ধ ব্যক্তির চোখ। এই ছবি দেখে ব্যবহারকারীর প্রশ্নের সংক্ষিপ্ত ও স্পষ্ট উত্তর ১-২ বাক্যে কথ্য বাংলায় দিন। ছবিতে বোঝা না গেলে সততার সাথে বলুন। কোনো মার্কডাউন ব্যবহার করবেন না। প্রশ্ন: $question"
+            } else {
+                "You are the eyes of a blind person. Answer their question about this photo briefly and clearly in English, in plain spoken language with no markdown. If you cannot tell from the image, say so honestly. Question: $question"
+            }
         }
     }
 
@@ -164,8 +173,8 @@ class GeminiClient(
                 }
                 put("contents", contents)
                 put("generationConfig", JSONObject().apply {
-                    put("maxOutputTokens", 300)
-                    put("temperature", 0.4)
+                    put("maxOutputTokens", 150)
+                    put("temperature", 0.2)
                 })
             }
 

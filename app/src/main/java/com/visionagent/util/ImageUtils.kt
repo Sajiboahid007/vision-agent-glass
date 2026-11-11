@@ -18,8 +18,8 @@ import kotlin.math.roundToInt
  */
 object ImageUtils {
 
-    private const val MAX_DIMENSION_PX = 1024
-    private const val JPEG_QUALITY = 80
+    private const val MAX_DIMENSION_PX = 800
+    private const val JPEG_QUALITY = 75
 
     /**
      * Processes an [ImageProxy] from CameraX for the Gemini API:

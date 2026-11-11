@@ -75,8 +75,10 @@ class CameraController(private val context: Context) {
 
             val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
 
+            @Suppress("DEPRECATION")
             val capture = ImageCapture.Builder()
                 .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+                .setTargetResolution(android.util.Size(1024, 768))
                 .build()
             imageCapture = capture
 
