@@ -133,14 +133,22 @@ fun MainScreen(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text(
-                text = if (isBn) "ভিশন এজেন্ট" else "VISION AGENT",
-                style = MaterialTheme.typography.titleLarge.copy(
-                    fontWeight = FontWeight.Black,
-                    color = HighContrastWhite,
-                    letterSpacing = 1.sp
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                androidx.compose.foundation.Image(
+                    painter = androidx.compose.ui.res.painterResource(id = com.visionagent.R.drawable.ic_launcher),
+                    contentDescription = "Vision Agent Logo",
+                    modifier = Modifier.size(36.dp)
                 )
-            )
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    text = if (isBn) "ভিশন এজেন্ট" else "VISION AGENT",
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontWeight = FontWeight.Black,
+                        color = HighContrastWhite,
+                        letterSpacing = 1.sp
+                    )
+                )
+            }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 // Quick 1-Tap Language Switcher (EN / বাংলা)
